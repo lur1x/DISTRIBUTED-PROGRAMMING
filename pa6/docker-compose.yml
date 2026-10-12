@@ -1,0 +1,238 @@
+version: '3.8'
+
+services:
+  app1:
+    build: Valuator
+    container_name: valuator-app1
+    ports:
+      - "8081:80"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80
+      - DB_MAIN=redis-main:6379
+      - DB_RU=redis-ru:6379
+      - DB_EU=redis-eu:6379
+      - DB_ASIA=redis-asia:6379
+      - RABBITMQ_HOST=rabbitmq
+    depends_on:
+      redis-main:
+        condition: service_healthy
+      redis-ru:
+        condition: service_healthy
+      redis-eu:
+        condition: service_healthy
+      redis-asia:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - valuator-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "dotnet", "--info"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  app2:
+    build: Valuator
+    container_name: valuator-app2
+    ports:
+      - "8082:80"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:80
+      - DB_MAIN=redis-main:6379
+      - DB_RU=redis-ru:6379
+      - DB_EU=redis-eu:6379
+      - DB_ASIA=redis-asia:6379
+      - RABBITMQ_HOST=rabbitmq
+    depends_on:
+      redis-main:
+        condition: service_healthy
+      redis-ru:
+        condition: service_healthy
+      redis-eu:
+        condition: service_healthy
+      redis-asia:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - valuator-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "dotnet", "--info"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  nginx:
+    image: nginx:latest
+    container_name: valuator-nginx
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./nginx/conf/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/logs:/var/log/nginx
+    depends_on:
+      app1:
+        condition: service_healthy
+      app2:
+        condition: service_healthy
+    networks:
+      - valuator-network
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  redis-main:
+    image: redis:alpine
+    container_name: redis-main
+    ports:
+      - "6383:6379"
+    networks:
+      - valuator-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis-ru:
+    image: redis:alpine
+    container_name: redis-ru
+    ports:
+      - "6380:6379"
+    networks:
+      - valuator-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis-eu:
+    image: redis:alpine
+    container_name: redis-eu
+    ports:
+      - "6381:6379"
+    networks:
+      - valuator-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis-asia:
+    image: redis:alpine
+    container_name: redis-asia
+    ports:
+      - "6382:6379"
+    networks:
+      - valuator-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: valuator-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - valuator-network
+    healthcheck:
+      test: [ "CMD", "rabbitmq-diagnostics", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  rankcalculator1:
+    build: RankCalculator
+    container_name: valuator-rankcalculator1
+    environment:
+      - DB_MAIN=redis-main:6379
+      - DB_RU=redis-ru:6379
+      - DB_EU=redis-eu:6379
+      - DB_ASIA=redis-asia:6379
+      - RABBITMQ_HOST=rabbitmq
+    depends_on:
+      redis-main:
+        condition: service_healthy
+      redis-ru:
+        condition: service_healthy
+      redis-eu:
+        condition: service_healthy
+      redis-asia:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - valuator-network
+    restart: unless-stopped
+
+  rankcalculator2:
+    build: RankCalculator
+    container_name: valuator-rankcalculator2
+    environment:
+      - DB_MAIN=redis-main:6379
+      - DB_RU=redis-ru:6379
+      - DB_EU=redis-eu:6379
+      - DB_ASIA=redis-asia:6379
+      - RABBITMQ_HOST=rabbitmq
+    depends_on:
+      redis-main:
+        condition: service_healthy
+      redis-ru:
+        condition: service_healthy
+      redis-eu:
+        condition: service_healthy
+      redis-asia:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - valuator-network
+    restart: unless-stopped
+
+  eventslogger1:
+    build: EventsLogger
+    container_name: valuator-logger1
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+    depends_on:
+      - app1
+      - app2
+      - rabbitmq
+    networks:
+      - valuator-network
+
+  eventslogger2:
+    build: EventsLogger
+    container_name: valuator-logger2
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+    depends_on:
+      - app1
+      - app2
+      - rabbitmq
+    networks:
+      - valuator-network
+
+networks:
+  valuator-network:
+    driver: bridge
